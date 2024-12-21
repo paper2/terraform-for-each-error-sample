@@ -85,6 +85,8 @@ resource "terraform_data" "subnets" {
 }
 
 resource "terraform_data" "subnet_flow_log" {
+  # for_eachで作成したリソースを直接渡すことができる。
+  # キーは渡したリソースのキーと同じになる。(subnet1, subnet2, subnet3)
   for_each = terraform_data.subnets
   input = {
     subnet_id = each.value.id
