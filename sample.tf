@@ -54,9 +54,6 @@
 #     value = each.value
 #   }
 # }
-
-// example-4
-
 # resource "terraform_data" "subnet_flow_log" {
 #   # 初期作成時にキーが unknown value になってしまうのでエラーになる
 #   for_each = toset([for s in terraform_data.subnets : s.id])
@@ -65,35 +62,34 @@
 #   }
 # }
 
+// example-4
+# locals {
+#   subnets = {
+#     subnet1 = { "cidr" = "10.0.1.0/24" },
+#     subnet2 = { "cidr" = "10.0.2.0/24" },
+#     subnet3 = { "cidr" = "10.0.3.0/24" },
+#     #    subnet4 = { "cidr" = "10.0.4.0/24" },  <- -targetで収束した後に追加しようとするとエラーになる
+#   }
+# }
+
+# resource "terraform_data" "subnets" {
+#   for_each = local.subnets
+#   input = {
+#     cidr_block = each.value.cidr
+#     tags = {
+#       Name = each.key
+#     }
+#   }
+# }
+
+# resource "terraform_data" "subnet_flow_log" {
+#   for_each = toset([for s in terraform_data.subnets : s.id])
+#   input = {
+#     subnet_id = each.value
+#   }
+# }
+
 // example chaining
-locals {
-  subnets = {
-    subnet1 = { "cidr" = "10.0.1.0/24" },
-    subnet2 = { "cidr" = "10.0.2.0/24" },
-    subnet3 = { "cidr" = "10.0.3.0/24" },
-  }
-}
-
-resource "terraform_data" "subnets" {
-  for_each = local.subnets
-  input = {
-    cidr_block = each.value.cidr
-    tags = {
-      Name = each.key
-    }
-  }
-}
-
-resource "terraform_data" "subnet_flow_log" {
-  # for_eachで作成したリソースを直接渡すことができる。
-  # キーは渡したリソースのキーと同じになる。(subnet1, subnet2, subnet3)
-  for_each = terraform_data.subnets
-  input = {
-    subnet_id = each.value.id
-  }
-}
-
-// example-5
 # locals {
 #   subnets = {
 #     subnet1 = { "cidr" = "10.0.1.0/24" },
@@ -112,64 +108,31 @@ resource "terraform_data" "subnet_flow_log" {
 #   }
 # }
 
-
-
-// この記事良かった。for_eachは便利だけど再作成などのリスクを伴うみたいな説明も上手い。
-// https://spacelift.io/blog/terraform-for-each#terraform-for-each-indexing-issues
-
-
-# locals {
-#   subnet_list = [
-#     { "name" = "subnet1", "cidr" = "10.0.1.0/24" },
-#     { "name" = "subnet2", "cidr" = "10.0.2.0/24" },
-#     { "name" = "subnet3", "cidr" = "10.0.3.0/24" },
-#   ]
-# }
-
-# resource "terraform_data" "subnet" {
-#   for_each = { for subnet in local.subnet_list : subnet.name => subnet }
-#   input = {
-#     cidr_block  = each.value.cidr
-#     tags = {
-#         Name = each.key
-#     }
-#   }
-# }
-
-
-// valueがunknownでもいけるか調査
-# locals {
-#   # unknown_values_map = {
-#   #   subnet1 = terraform_data.subnet["subnet1"].id
-#   #   subnet2 = terraform_data.subnet["subnet2"].id
-#   #   subnet3 = terraform_data.subnet["subnet3"].id
-#   # }
-#   unknown_values_map = {
-#     for i, s in local.subnets : i => terraform_data.subnet["subnet1"].id
-#   }
-# }
-
 # resource "terraform_data" "subnet_flow_log" {
-#   # error
-#   # for_each = toset([for s in terraform_data.subnet : s.id]) # keyがunknownになってしまう
-
-#   # valueがunknownでもいけるか調査
-#   # for_each = local.unknown_values_map
-#   # input = {
-#   #   subnet_id = each.value
-#   # }
-
-#   for_each = terraform_data.subnet
+#   # for_eachで作成したリソースを直接渡すことができる。
+#   # キーは渡したリソースのキーと同じになる。(subnet1, subnet2, subnet3)
+#   for_each = terraform_data.subnets
 #   input = {
 #     subnet_id = each.value.id
 #   }
 # }
 
-// 基本的にkeyが動的に
+// example-5
+locals {
+  subnets = {
+    subnet_1a = { "cidr" = "10.0.1.0/24", "az" : "ap-northeast-1a" },
+    subnet_1c = { "cidr" = "10.0.2.0/24", "az" : "ap-northeast-1c" },
+    subnet_1d = { "cidr" = "10.0.3.0/24", "az" : "ap-northeast-1d" },
+  }
+}
 
-// limitation
-// https://developer.hashicorp.com/terraform/language/meta-arguments/for_each#limitations-on-values-used-in-for_each
-
-// chaiging
-// https://developer.hashicorp.com/terraform/language/meta-arguments/for_each#chaining-for_each-between-resources
-
+resource "terraform_data" "subnets" {
+  for_each = local.subnets
+  input = {
+    cidr_block        = each.value.cidr
+    availability_zone = each.value.az
+    tags = {
+      Name = each.key
+    }
+  }
+}
