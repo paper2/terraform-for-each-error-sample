@@ -65,28 +65,33 @@
 #   }
 # }
 
-
-// example-5
+// example chaining
 locals {
   subnets = {
-    subnet_1a = { "cidr" = "10.0.1.0/24", "az" : "ap-northeast-1a" },
-    subnet_1b = { "cidr" = "10.0.2.0/24", "az" : "ap-northeast-1c" },
-    subnet_1c = { "cidr" = "10.0.3.0/24", "az" : "ap-northeast-1d" },
+    subnet1 = { "cidr" = "10.0.1.0/24" },
+    subnet2 = { "cidr" = "10.0.2.0/24" },
+    subnet3 = { "cidr" = "10.0.3.0/24" },
   }
 }
 
 resource "terraform_data" "subnets" {
   for_each = local.subnets
   input = {
-    cidr_block        = each.value.cidr
-    availability_zone = each.value.az
+    cidr_block = each.value.cidr
     tags = {
       Name = each.key
     }
   }
 }
 
-// example-x
+resource "terraform_data" "subnet_flow_log" {
+  for_each = terraform_data.subnets
+  input = {
+    subnet_id = each.value.id
+  }
+}
+
+// example-5
 # locals {
 #   subnets = {
 #     subnet1 = { "cidr" = "10.0.1.0/24" },
@@ -105,12 +110,6 @@ resource "terraform_data" "subnets" {
 #   }
 # }
 
-# resource "terraform_data" "subnet_flow_log" {
-#   for_each = terraform_data.subnets
-#   input = {
-#     subnet_id = each.value.id
-#   }
-# }
 
 
 // この記事良かった。for_eachは便利だけど再作成などのリスクを伴うみたいな説明も上手い。
