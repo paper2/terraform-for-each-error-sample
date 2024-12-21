@@ -118,21 +118,21 @@
 # }
 
 // example-5
-locals {
-  subnets = {
-    subnet_1a = { "cidr" = "10.0.1.0/24", "az" : "ap-northeast-1a" },
-    subnet_1c = { "cidr" = "10.0.2.0/24", "az" : "ap-northeast-1c" },
-    subnet_1d = { "cidr" = "10.0.3.0/24", "az" : "ap-northeast-1d" },
-  }
-}
+# locals {
+#   subnets = {
+#     subnet_1a = { "cidr" = "10.0.1.0/24", "az" : "ap-northeast-1a" },
+#     subnet_1c = { "cidr" = "10.0.2.0/24", "az" : "ap-northeast-1c" },
+#     subnet_1d = { "cidr" = "10.0.3.0/24", "az" : "ap-northeast-1d" },
+#   }
+# }
 
-resource "terraform_data" "subnets" {
-  for_each = local.subnets
-  input = {
-    cidr_block        = each.value.cidr
-    availability_zone = each.value.az
-    tags = {
-      Name = each.key
-    }
-  }
-}
+# resource "terraform_data" "subnets" {
+#   for_each = local.subnets
+#   input = {
+#     cidr_block        = each.value.cidr
+#     availability_zone = each.value.az
+#     tags = {
+#       Name = each.key
+#     }
+#   }
+# }

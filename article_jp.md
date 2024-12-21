@@ -1,18 +1,14 @@
 Terraformの`for_each`を利用して、以下のエラーに遭遇したことがある方は多いのではないでしょうか。
 
-
 ```
-The "for_each" set includes values derived from resource attributes that cannot be determined until apply, and so Terraform cannot
-determine the full set of keys that will identify the instances of this resource.
+The "for_each" set includes values derived from resource attributes that cannot be determined until apply, and so Terraform cannot determine the full set of keys that will identify the instances of this resource.
 
-When working with unknown values in for_each, it's better to use a map value where the keys are defined statically in your
-configuration and where only the values contain apply-time results.
+When working with unknown values in for_each, it's better to use a map value where the keys are defined statically in your configuration and where only the values contain apply-time results.
 
-Alternatively, you could use the -target planning option to first apply only the resources that the for_each value depends on, and
-then apply a second time to fully converge.
+Alternatively, you could use the -target planning option to first apply only the resources that the for_each value depends on, and then apply a second time to fully converge.
 ```
 
-このエラーを一時的に回避する方法として、`-target`で先に依存するリソースのみを適用する、という方法があります。
+このエラーを一時的に回避する方法として、`-target`で先に依存するリソースのみをapplyする、という方法があります。
 しかし、これはあくまでもワークアラウンドであり、長期的には負債を抱え込む可能性があります。
 懺悔しておくと、私も`-target`で解決してきてしまった資産があります。
 そうならないように本記事では、上記エラーの理由が理解できるような`for_each`の解説と共に、堅牢に`for_each`を活用するためのポイントを紹介します。
@@ -28,11 +24,13 @@ then apply a second time to fully converge.
 1. `for_each`のキーは原則`known value`(plan時点で確定した値)になるようにし、`-target`による解決に頼らない
 2. キーは一貫性が高く変更されにくいものを選ぶ
 
-上記が本記事におけるまとめです。以降では`for_each`の基本と重要な制約について説明します。その後、上記のポイントを満たさない場合どのようなことが起きるかを説明し、理解を深めます。
+上記が本記事のコアです。以降は上記を理解するための説明になります。
+
+まず`for_each`の基本と重要な制約について説明していきます。その後、上記のポイントを満たさない場合どのようなことが起きるかを説明し、理解を深めます。
 
 # for_eachの基本
 
-`for_each`はTerraform記述内で同種のリソースを繰り返し作成する際に用いる機能です。`count`と似た役割を果たしますが、`for_each`は、リソースに一意なキーを割り当てることで、リソースの増減時や属性変更時に不要な再作成や破壊的変更を抑える効果が期待できます。一方で、キーの扱いにはいくつかの制約があり、そこを正しく理解しないとエラーに直面しやすくなります。
+`for_each`はTerraform記述内で同種のリソースを繰り返し作成する際に用いる機能です。`count`と似た役割を果たしますが、`for_each`は、リソースに一意なキーを割り当てることで、リソースの増減時などに不要な再作成を抑える効果が期待できます。一方で、キーの扱いには制約があり、そこを正しく理解しないとエラーに直面しやすくなります。
 
 <details>
   <summary>for_eachのコード例</summary>
@@ -114,7 +112,7 @@ Plan: 3 to add, 0 to change, 0 to destroy.
 
 > Use count and for_each sparingly.
 
-[公式のスタイルガイド](https://developer.hashicorp.com/terraform/language/style)では、`for_each`や`count`の控えめな利用が推奨されています。過度に利用せず、可能な限りシンプルな形で記述するのが良いでしょう。複雑な依存関係を内包した動的なリソース生成は、実装や運用フェーズで問題を引き起こしやすいです。
+[公式のスタイルガイド](https://developer.hashicorp.com/terraform/language/style)では、`for_each`や`count`の控えめな利用が推奨されています。過度に利用せず、可能な限りシンプルな形で記述するのが良いでしょう。複雑な依存関係を内包した動的なリソース生成は、運用フェーズで問題を引き起こしやすいです。
 
 # 重要な制約：キーは`known value`でなければいけない
 
@@ -122,37 +120,22 @@ Plan: 3 to add, 0 to change, 0 to destroy.
 
 なお、`map`や`set`などループで扱う型の理解も重要となります。もし曖昧な方は[Terraformの型とループ処理 for_each = { for } について理解する](https://zenn.dev/kasa/articles/8fe998e04cb916)をぜひ読んでみてください。
 
-`known value`はTerraformがplan時点で確定できる値のことです((公式の用語集([Terraformglossary](https://developer.hashicorp.com/terraform/docs/glossary#terraform-glossary))を確認しましたが正式な定義は見つけられていません。たぶんあっていると思います。))。例えば、`local`ブロックや変数のplan時点で判明する静的な値が該当します。
-
-一方で`unknown value`はapply後でないと確定できない値のことです。未作成のリソース属性などが該当します。`apply`時に`known after apply`と出ているものは`unknown value`です。
-
 <details>
-  <summary>for_eachのキーにunknown valueを利用したコード例</summary>
+  <summary>for_eachのキーにunknown valueを利用してエラーになる例</summary>
 
 ```hcl
-locals {
-  subnets = {
-    subnet1 = { "cidr" = "10.0.1.0/24" },
-    subnet2 = { "cidr" = "10.0.2.0/24" },
-    subnet3 = { "cidr" = "10.0.3.0/24" },
-  }
-}
-
 resource "terraform_data" "subnets" {
-  for_each = local.subnets
+  for_each = toset(["a", "b"])
   input = {
-    cidr_block = each.value.cidr
-    tags = {
-      Name = each.key
-    }
+    key   = each.key
+    value = each.value
   }
 }
-
 resource "terraform_data" "subnet_flow_log" {
-  # 初期作成時にキーがunknown valueになってしまうのでエラーになる
+  # 初期作成時にキーが unknown value になってしまうのでエラーになる
   for_each = toset([for s in terraform_data.subnets : s.id])
   input = {
-    subnet_id = each.value
+    subnet_id = each.value.id
   }
 }
 ```
@@ -175,14 +158,12 @@ resource "terraform_data" "subnet_flow_log" {
 キーが`unknown value`だと、冒頭のエラーが出ることがあります。
 
 ```
-│ The "for_each" set includes values derived from resource attributes that cannot be determined until apply, and so Terraform cannot
-│ determine the full set of keys that will identify the instances of this resource.
-│
-│ When working with unknown values in for_each, it's better to use a map value where the keys are defined statically in your
-│ configuration and where only the values contain apply-time results.
-│
-│ Alternatively, you could use the -target planning option to first apply only the resources that the for_each value depends on, and
-│ then apply a second time to fully converge.
+│ The "for_each" set includes values derived from resource attributes that cannot be determined until apply, and so Terraform cannot determine the full set of keys that will identify the instances of
+│ this resource.
+│ 
+│ When working with unknown values in for_each, it's better to use a map value where the keys are defined statically in your configuration and where only the values contain apply-time results.
+│ 
+│ Alternatively, you could use the -target planning option to first apply only the resources that the for_each value depends on, and then apply a second time to fully converge.
 ```
 
 このエラーは「`for_each`のキーには`known value`を指定しよう。`unknown value`を扱いたいなら`map`を利用するといいよ。あるいは`-target`で収束させることもできます」と書かれています。
@@ -191,14 +172,52 @@ resource "terraform_data" "subnet_flow_log" {
 
 例えば共有モジュールを変更して各利用先で自動planをするとエラーで落ちます。自動applyによる運用自動化の足枷にもなります。共有モジュールの利用先が2,3個であれば良いですが、それが30個と増えていくと各環境での`-target`も大変な作業になっていきます。
 
-また、この問題は参照先にも伝播します。
+また、このエラーは参照先にも伝播します。
 
 [f:id:paper2parasol:20241221161630p:plain]
 
-`subnet_flow_log`が`subets`リソースの`id`など`unknown value`になり得る値を参照している場合に、`terraform apply -target=terraform_data.subnets`で一時的にエラーを回避したとしても、その後subnetを追加してapplyしようとすると同じエラーが発生します。
+`subnet_flow_log`が`subets`リソースの`id`など`unknown value`になり得る値を参照している場合に、`terraform apply -target=subnets`で一時的にエラーを回避したとしても、その後subnetを追加してapplyしようとすると同じエラーが発生します。
 
 <details>
-  <summary>コード例</summary>
+  <summary>subnetを追加すると再度エラーになる例</summary>
+
+```hcl
+locals {
+  subnets = {
+    subnet1 = { "cidr" = "10.0.1.0/24" },
+    subnet2 = { "cidr" = "10.0.2.0/24" },
+    subnet3 = { "cidr" = "10.0.3.0/24" },
+#    subnet4 = { "cidr" = "10.0.4.0/24" },  <- -targetで収束した後に追加しようとするとエラーになる
+  }
+}
+
+resource "terraform_data" "subnets" {
+  for_each = local.subnets
+  input = {
+    cidr_block = each.value.cidr
+    tags = {
+      Name = each.key
+    }
+  }
+}
+
+resource "terraform_data" "subnet_flow_log" {
+  for_each = toset([for s in terraform_data.subnets : s.id])
+  input = {
+    subnet_id = each.value
+  }
+}
+```
+</details>
+
+業務で活用するコードは長期間の運用を想定し、変更時にエラーがでやすいコードは書かない方が良いです。そのため、`-target`で解決するのではなく`unkown value`をキーにしない工夫を考えた方が良いでしょう。
+
+その工夫の一つとして`for_each`の[連鎖(chaining)](https://developer.hashicorp.com/terraform/language/meta-arguments/for_each#chaining-for_each-between-resources)があります。
+
+<details>
+  <summary>for_eachの連鎖を利用した例</summary>
+
+以下はキーに`unknown value`を使わず連鎖させる一例です。
 
 ```hcl
 locals {
@@ -220,16 +239,15 @@ resource "terraform_data" "subnets" {
 }
 
 resource "terraform_data" "subnet_flow_log" {
-  # 初期作成時にキーがunknown valueになってしまうのでエラーになる
-  for_each = toset([for s in terraform_data.subnets : s.id])
+  # for_eachで作成したリソースを直接渡す
+  for_each = terraform_data.subnets
   input = {
-    subnet_id = each.value
+    subnet_id = each.value.id
   }
 }
 ```
 </details>
 
-業務で活用するコードは長期で多くの人が触ることを想定した方が良いです。そのようなコードで、変更時にエラーがでやすいコードは書かない方が良いです。
 
 一方で、一度applyが済んだ既存リソースを参照する場合、そのタイミングでは参照する値が`known value`となっているため、気付かずにそのようなコードを書いてしまうこともあります。
 
@@ -251,17 +269,16 @@ resource "terraform_data" "subnet_flow_log" {
 ```hcl
 locals {
   subnets = {
-    subnet_1a = { "cidr" = "10.0.1.0/24", "az" : "ap-northeast-1a" },
-    subnet_1c = { "cidr" = "10.0.2.0/24", "az" : "ap-northeast-1c" },
-    subnet_1d = { "cidr" = "10.0.3.0/24", "az" : "ap-northeast-1d" },
+    subnet1 = { "cidr" = "10.0.1.0/24" },
+    subnet2 = { "cidr" = "10.0.2.0/24" },
+    subnet3 = { "cidr" = "10.0.3.0/24" },
   }
 }
 
 resource "terraform_data" "subnets" {
   for_each = local.subnets
   input = {
-    cidr_block        = each.value.cidr
-    availability_zone = each.value.az
+    cidr_block = each.value.cidr
     tags = {
       Name = each.key
     }
@@ -324,16 +341,12 @@ resource "terraform_data" "subnets" {
 
 # まとめ
 
-以上を踏まえると、
-
-- 冒頭のエラーが発生するため`for_each`のキーは原則`known value`(plan時点で確定した値)になるようにし、`-target`による解決に頼らない。  
-- 変更時に再作成となるため、キーは一貫性が高く変更されにくいものを選ぶ。
+- `for_each`のキーは原則`known value`(plan時点で確定した値)になるようにし、`-target`による解決に頼らない。  
+- キーは一貫性が高く変更されにくいものを選ぶ。
 
 という2点が重要です。`-target`を常用するのは本質的な解決ではなく、運用を複雑化させます。`for_each`を正しく理解し、堅牢なTerraformコードを維持していきましょう。
 
-# 削ぎ落とした内容。本当は書きたい
-
-## `for_each`と`set`
+# (おまけ）`for_each`と`set`
 
 `for_each`を扱う上で`set`の理解は重要です。`set(string)`の値は`for_each`のキーとして直接利用されるため、`known value`である必要があります。
 
@@ -379,34 +392,4 @@ Plan: 2 to add, 0 to change, 0 to destroy.
 
 `for_each`に渡された`set(string)`はキーと値両方に利用されていることがわかります。そのため、リストに`unknown value`を含めて`toset`関数で`set`を作るとエラーになります。
 
-## `for_each`の連鎖(chaining)
-
-なお、上記のような場合には`for_each`の[連鎖(chaining)](https://developer.hashicorp.com/terraform/language/meta-arguments/for_each#chaining-for_each-between-resources)を活用して解決することができます。以下はキーに`unknown value`を使わず連鎖させる一例です。
-
-```hcl
-locals {
-  subnets = {
-    subnet1 = { "cidr" = "10.0.1.0/24" },
-    subnet2 = { "cidr" = "10.0.2.0/24" },
-    subnet3 = { "cidr" = "10.0.3.0/24" },
-  }
-}
-
-resource "terraform_data" "subnets" {
-  for_each = local.subnets
-  input = {
-    cidr_block = each.value.cidr
-    tags = {
-      Name = each.key
-    }
-  }
-}
-
-resource "terraform_data" "subnet_flow_log" {
-  # for_eachで作成したリソースを直接渡す
-  for_each = terraform_data.subnets
-  input = {
-    subnet_id = each.value.id
-  }
-}
-```
+`toset`関数を利用する場合は値も`unkown value`にならないように気をつけましょう。
