@@ -1,4 +1,4 @@
-Terraformの`for_each`を利用して、以下のエラーに遭遇したことがある方は多いのではないでしょうか。
+Terraformの`for_each`を利用して、以下のエラーに遭遇したことがある人は多いのではないでしょうか。
 
 ```
 The "for_each" set includes values derived from resource attributes that cannot be determined until apply, and so Terraform cannot determine the full set of keys that will identify the instances of this resource.
@@ -8,10 +8,9 @@ When working with unknown values in for_each, it's better to use a map value whe
 Alternatively, you could use the -target planning option to first apply only the resources that the for_each value depends on, and then apply a second time to fully converge.
 ```
 
-このエラーを一時的に回避する方法として、`-target`で先に依存するリソースのみをapplyする、という方法があります。
-しかし、これはあくまでもワークアラウンドであり、長期的には負債を抱え込む可能性があります。
-懺悔しておくと、私も`-target`で解決してきてしまった資産があります。
-そうならないように本記事では、上記エラーの理由が理解できるような`for_each`の解説と共に、堅牢に`for_each`を活用するためのポイントを紹介します。
+このエラーを回避する方法として、`-target`で先に依存するリソースのみをapplyする、という方法があります。
+しかし、この方法では長期的には負債を抱え込む可能性があります。
+本記事では、上記エラーの理由が理解できるような`for_each`の解説と共に、堅牢に`for_each`を活用するためのポイントを紹介します。
 
 ---
 
@@ -35,7 +34,7 @@ Alternatively, you could use the -target planning option to first apply only the
 <details>
   <summary>for_eachのコード例</summary>
 
-[terraform_data](https://developer.hashicorp.com/terraform/language/resources/terraform-data)を用いて簡単なコードを書いてみます。
+ダミーの resource として[terraform_data](https://developer.hashicorp.com/terraform/language/resources/terraform-data)を用いて簡単なコードを書いてみます。
 
 ```hcl
 locals {
@@ -114,7 +113,7 @@ Plan: 3 to add, 0 to change, 0 to destroy.
 
 [公式のスタイルガイド](https://developer.hashicorp.com/terraform/language/style)では、`for_each`や`count`の控えめな利用が推奨されています。過度に利用せず、可能な限りシンプルな形で記述するのが良いでしょう。複雑な依存関係を内包した動的なリソース生成は、運用フェーズで問題を引き起こしやすいです。
 
-# 重要な制約：キーは`known value`でなければいけない
+## 重要な制約：キーは`known value`でなければいけない
 
 `for_each`を利用する上で非常に重要な制約は、「`for_each`に渡す`map`のキーがplan時点で確定している`known value`でなければならない」という点です。`for_each`の入力が`set(string)`の場合はすべての値が`known value`である必要があります。`unknown value`を指定してしまうと冒頭のエラーが発生します。
 
@@ -153,7 +152,7 @@ resource "terraform_data" "subnet_flow_log" {
 
 ではこれらを満たさない場合どのようなことが起きるのでしょうか。それを説明していきます。
 
-## キーに`unknown value`を利用した場合
+## キーに`unknown value`を利用した時
 
 キーが`unknown value`だと、冒頭のエラーが出ることがあります。
 
@@ -174,9 +173,9 @@ resource "terraform_data" "subnet_flow_log" {
 
 また、このエラーは参照先にも伝播します。
 
-[f:id:paper2parasol:20241221161630p:plain]
+[f:id:paper2parasol:20241227170401p:plain]
 
-`subnet_flow_log`が`subets`リソースの`id`など`unknown value`になり得る値を参照している場合に、`terraform apply -target=subnets`で一時的にエラーを回避したとしても、その後subnetを追加してapplyしようとすると同じエラーが発生します。
+例えば`subnet_flow_log`が`subets`リソースの`id`など`unknown value`になり得る値を参照している場合に、`terraform apply -target=subnets`で一時的にエラーを回避したとしても、その後subnetを追加してapplyしようとすると同じエラーが発生します。
 
 <details>
   <summary>subnetを追加すると再度エラーになる例</summary>
@@ -251,7 +250,7 @@ resource "terraform_data" "subnet_flow_log" {
 
 一方で、一度applyが済んだ既存リソースを参照する場合、そのタイミングでは参照する値が`known value`となっているため、気付かずにそのようなコードを書いてしまうこともあります。
 
-環境複製時や依存先の変更時に初めてエラーに遭遇するケースもあるので、lintなどの自動チェックツールが現状ほぼない以上、`for_each`を正しく理解し、開発者が常にこの問題を意識する必要があります。
+環境複製時や依存先の変更時に初めてエラーに遭遇するケースもあります。lintなどの自動チェックができない状況では`for_each`を正しく理解し、開発者が常にこの問題を意識する必要があります。
 
 ## キーが将来的に一意でなくなったり、変更が必要な時
 
